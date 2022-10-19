@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+// comments
+
+/* comments */
+
+package user;
+
+option go_package = './pb';
+
+import "proto/date.proto";
+
+message User {
+    int32 id = 1;
+    string name = 2;
+    string email = 3;
+    repeated string phone = 4;
+    Role role = 5;
+    date.Date created_at = 6;
+    oneof avatar {
+        string text = 7;
+        Image image = 8;
+        Video video = 9;
+    }
+    Company.Department affiliation = 10;
+}
+
+enum Role {
+    UNKNOWN = 0;
+    ADMIN = 1;
+    ORDINAL = 2;
+}
+
+message Image{}
+message Video{}
+
+message Company {
+    message Department {}
+}
