@@ -2,6 +2,7 @@ package main
 
 import (
 	"basics/pb"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -18,6 +19,7 @@ type server struct {
 	pb.UnimplementedFileServiceServer
 }
 
+// unary rpc
 func (*server) ListFiles(ctx context.Context, req *pb.ListFilesRequest) (*pb.ListFilesResponse, error) {
 
 	cd, _ := os.Getwd()
@@ -42,6 +44,7 @@ func (*server) ListFiles(ctx context.Context, req *pb.ListFilesRequest) (*pb.Lis
 	return res, nil
 }
 
+// server streaming rpc
 func (*server) Download(req *pb.DownloadRequest, stream pb.FileService_DownloadServer) error {
 
 	n := req.GetFilename()
@@ -71,6 +74,49 @@ func (*server) Download(req *pb.DownloadRequest, stream pb.FileService_DownloadS
 	}
 
 	return nil
+}
+
+func (*server) Upload(stream pb.FileService_UploadServer) error {
+	var buf bytes.Buffer
+	for {
+		req, err := stream.Recv()
+		if err == io.EOF {
+			res := &pb.UploadResponse{Size: int32(buf.Len())}
+			return stream.SendAndClose(res)
+		}
+		if err != nil {
+			return err
+		}
+
+		data := req.GetData()
+		log.Printf("%v", string(data))
+		buf.Write(data)
+	}
+}
+
+// bi streaming rpc
+func (*server) UploadAndNotifyProgress(stream pb.FileService_UploadAndNotifyProgressServer) error {
+	size := 0
+
+	for {
+		req, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return nil
+		}
+		data := req.GetData()
+		size += len(data)
+
+		res := &pb.UploadAndNotifyProgressResponse{
+			Msg: fmt.Sprintf("%v", size),
+		}
+		err = stream.Send(res)
+		if err != nil {
+			return err
+		}
+	}
 }
 
 func main() {

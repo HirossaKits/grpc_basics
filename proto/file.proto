@@ -17,7 +17,29 @@ message DownloadReesponse {
     bytes data = 1;
 }
 
+message UploadRequest {
+    bytes data = 1;
+}
+
+message UploadResponse {
+    int32 size = 1;
+}
+
+message UploadAndNotifyProgressRequest {
+    bytes data = 1;
+}
+
+message UploadAndNotifyProgressResponse {
+    string msg = 1;
+}
+
 service FileService {
+    // unary rpc
     rpc ListFiles (ListFilesRequest) returns (ListFilesResponse);
+    // server streaming rpc
     rpc Download (DownloadRequest) returns (stream DownloadReesponse);
+    // client streaming rpc
+    rpc Upload (stream UploadRequest) returns (UploadResponse);
+    // bi streaming rpc
+    rpc UploadAndNotifyProgress (stream UploadAndNotifyProgressRequest) returns (stream UploadAndNotifyProgressResponse);
 }
