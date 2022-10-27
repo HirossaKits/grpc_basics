@@ -102,7 +102,7 @@ func CallUpload(client pb.FileServiceClient) {
 }
 
 // bi streaming rpc
-func CallUploadAndNotifyProgress(client pb.FileServiceClient) {
+func CallUploadAndNotifyProgress(client pb.FileServiceClient) ([]byte, error) {
 	cd, _ := os.Getwd()
 	p := path.Join(cd, "public", "date.txt")
 
@@ -155,4 +155,6 @@ func CallUploadAndNotifyProgress(client pb.FileServiceClient) {
 		close(ch)
 	}()
 	<-ch
+
+	return buf, err
 }
