@@ -12,25 +12,38 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 func main() {
-	conn, err := grpc.Dial("localhost:3111", grpc.WithInsecure())
+	h, _ := os.UserHomeDir()
+	cert := filepath.Join(h, "Library/Application Support/mkcert/rootCA.pem")
+	fmt.Println(cert)
+	creds, err := credentials.NewClientTLSFromFile(cert, "")
 	if err != nil {
-		log.Fatalf("Failed to connect: %v", err)
+		log.Fatalf("failed to new creds")
+	}
+
+	conn, err := grpc.Dial("localhost:3111", grpc.WithTransportCredentials(creds))
+	if err != nil {
+		log.Fatalf("failed to connect: %v", err)
 	}
 	defer conn.Close()
 
 	client := pb.NewFileServiceClient(conn)
 	// callListFiles(client)
-	// callDownload(client)
+	callDownload(client)
 	// CallUpload(client)
-	CallUploadAndNotifyProgress(client)
+	// CallUploadAndNotifyProgress(client)
 }
 
 // unary rpc
 func callListFiles(client pb.FileServiceClient) {
-	res, err := client.ListFiles(context.Background(), &pb.ListFilesRequest{})
+	md := metadata.New(map[string]string{"authorization": "Bearer tests"})
+	ctx := metadata.NewOutgoingContext(context.Background(), md)
+	res, err := client.ListFiles(ctx, &pb.ListFilesRequest{})
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -39,11 +52,21 @@ func callListFiles(client pb.FileServiceClient) {
 
 // server streaming rpc
 func callDownload(client pb.FileServiceClient) {
+	// time out
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
 	req := &pb.DownloadRequest{Filename: "user.txt"}
-	stream, err := client.Download(context.Background(), req)
+	stream, err := client.Download(ctx, req)
 	if err != nil {
-		log.Fatal(err)
+
+		resErr, ok := status.FromError(err)
+
+		if ok {
+			log.Fatalf("code = %v desc = %v", resErr.Code(), resErr.Message())
+		} else {
+			log.Fatal(err)
+		}
 	}
 
 	for {
@@ -55,7 +78,6 @@ func callDownload(client pb.FileServiceClient) {
 		if err != nil {
 			log.Fatalln(err)
 		}
-		time.Sleep(1 * time.Second)
 		fmt.Print(string(res.GetData()))
 	}
 }

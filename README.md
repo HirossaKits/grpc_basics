@@ -9,3 +9,12 @@ test
 ```
 gotests -template_dir template -all client/main.go
 ```
+
+ssl
+
+```
+brew install mkcert
+mkcert -install
+mkcert -CAROOT
+mkcert localhost
+```

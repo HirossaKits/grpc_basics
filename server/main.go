@@ -11,8 +11,15 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/status"
+
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpc_auth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
 )
 
 type server struct {
@@ -51,6 +58,10 @@ func (*server) Download(req *pb.DownloadRequest, stream pb.FileService_DownloadS
 	cd, _ := os.Getwd()
 	p := filepath.Join(cd, "public", n)
 
+	if _, err := os.Stat(p); os.IsNotExist(err) {
+		return status.Error(codes.NotFound, "file was not found")
+	}
+
 	f, err := os.Open(p)
 	if err != nil {
 		return err
@@ -71,6 +82,7 @@ func (*server) Download(req *pb.DownloadRequest, stream pb.FileService_DownloadS
 		if sendErr != nil {
 			return sendErr
 		}
+		time.Sleep(1 * time.Second)
 	}
 
 	return nil
@@ -107,6 +119,7 @@ func (*server) UploadAndNotifyProgress(stream pb.FileService_UploadAndNotifyProg
 			return nil
 		}
 		data := req.GetData()
+		log.Printf("%v", string(data))
 		size += len(data)
 
 		res := &pb.UploadAndNotifyProgressResponse{
@@ -119,13 +132,51 @@ func (*server) UploadAndNotifyProgress(stream pb.FileService_UploadAndNotifyProg
 	}
 }
 
+func logging() grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+		log.Printf("request: %+v", req)
+
+		resp, err = handler(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+
+		log.Printf("response: %+v", resp)
+
+		return resp, nil
+	}
+}
+
+func authorize(ctx context.Context) (context.Context, error) {
+	token, err := grpc_auth.AuthFromMD(ctx, "Bearer")
+	if err != nil {
+		return nil, err
+	}
+	if token != "test" {
+		return nil, status.Error(codes.Unauthenticated, "token is invalid")
+	}
+	return ctx, nil
+}
+
 func main() {
 	l, err := net.Listen("tcp", "localhost:3111")
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
-	s := grpc.NewServer()
+	creds, err := credentials.NewServerTLSFromFile("ssl/localhost.pem", "ssl/localhost-key.pem")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	s := grpc.NewServer(
+		grpc.Creds(creds),
+		grpc.UnaryInterceptor(
+			grpc_middleware.ChainUnaryServer(
+				logging(),
+				grpc_auth.UnaryServerInterceptor(authorize))),
+	)
+
 	pb.RegisterFileServiceServer(s, &server{})
 
 	fmt.Println("server is running...")
